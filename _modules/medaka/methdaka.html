@@ -1,0 +1,381 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>medaka.methdaka &mdash; Medaka 0.11.2 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Medaka
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.11.2
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../snp.html">Variant calling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../methylation.html">Methylation calling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../walkthrough.html">Walkthrough</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../draft_origin.html">Origin of the draft sequence</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../development.html">Development</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../future.html">History and Future Directions</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Medaka</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+          <li><a href="../medaka.html">medaka</a> &raquo;</li>
+        
+      <li>medaka.methdaka</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for medaka.methdaka</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Functionality for aggregating single read methylation calls.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span>
+<span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ProcessPoolExecutor</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">mappy</span>
+<span class="kn">from</span> <span class="nn">ont_fast5_api.analysis_tools.basecall_1d</span> <span class="kn">import</span> <span class="n">Basecall1DTools</span>
+<span class="kn">from</span> <span class="nn">ont_fast5_api.conversion_tools.conversion_utils</span> <span class="kn">import</span> <span class="n">get_fast5_file_list</span>
+<span class="kn">from</span> <span class="nn">ont_fast5_api.fast5_interface</span> <span class="kn">import</span> <span class="n">get_fast5_file</span>
+<span class="kn">import</span> <span class="nn">pysam</span>
+
+<span class="kn">import</span> <span class="nn">medaka.common</span>
+
+
+<span class="n">MODBASEPATH</span> <span class="o">=</span> <span class="s1">&#39;BaseCalled_template/ModBaseProbs&#39;</span>
+<span class="n">BASES</span> <span class="o">=</span> <span class="s1">&#39;A 6mA C 5mC G T&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+<span class="n">MODTYPE</span> <span class="o">=</span> <span class="p">[(</span><span class="n">b</span><span class="p">,</span> <span class="s1">&#39;uint8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">BASES</span><span class="p">]</span>
+<span class="n">MOTIFS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;dcm&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="c1"># seq: [fwd offset, rev offset]</span>
+        <span class="c1"># NB: code will assume rev offset is larger!</span>
+        <span class="s1">&#39;motifs&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;CCAGG&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+            <span class="s1">&#39;CCTGG&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span>
+        <span class="s1">&#39;tag&#39;</span><span class="p">:</span> <span class="s1">&#39;MC&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;dam&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;motifs&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;GATC&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)},</span>
+        <span class="s1">&#39;tag&#39;</span><span class="p">:</span> <span class="s1">&#39;MA&#39;</span><span class="p">},</span>
+    <span class="s1">&#39;cpg&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;motifs&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;CG&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
+        <span class="s1">&#39;tag&#39;</span><span class="p">:</span> <span class="s1">&#39;MC&#39;</span><span class="p">}</span>
+    <span class="p">}</span>
+
+
+<div class="viewcode-block" id="hdf_to_sam_worker"><a class="viewcode-back" href="../../medaka.html#medaka.methdaka.hdf_to_sam_worker">[docs]</a><span class="k">def</span> <span class="nf">hdf_to_sam_worker</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">fname</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Extract and align basecall and methylation data from `.fast5`.</span>
+
+<span class="sd">    :param reference: `.fasta` file containing reference sequence(s).</span>
+<span class="sd">    :param fname: `.&#39;fast5` file containing read data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">medaka</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">get_named_logger</span><span class="p">(</span><span class="s1">&#39;ModExtract&#39;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Processing </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fname</span><span class="p">))</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+    <span class="n">aligner</span> <span class="o">=</span> <span class="n">mappy</span><span class="o">.</span><span class="n">Aligner</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">preset</span><span class="o">=</span><span class="s1">&#39;map-ont&#39;</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">get_fast5_file</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f5</span><span class="p">:</span>
+        <span class="n">reads</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">f5</span><span class="o">.</span><span class="n">get_read_ids</span><span class="p">())</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Found </span><span class="si">{}</span><span class="s2"> reads for </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">reads</span><span class="p">),</span> <span class="n">fname</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">read_id</span> <span class="ow">in</span> <span class="n">reads</span><span class="p">:</span>
+            <span class="n">read</span> <span class="o">=</span> <span class="n">f5</span><span class="o">.</span><span class="n">get_read</span><span class="p">(</span><span class="n">read_id</span><span class="p">)</span>
+            <span class="n">tool</span> <span class="o">=</span> <span class="n">Basecall1DTools</span><span class="p">(</span><span class="n">read</span><span class="p">)</span>
+            <span class="n">name</span><span class="p">,</span> <span class="n">sequence</span><span class="p">,</span> <span class="n">qstring</span> <span class="o">=</span> <span class="n">tool</span><span class="o">.</span><span class="n">get_called_sequence</span><span class="p">(</span>
+                <span class="s1">&#39;template&#39;</span><span class="p">,</span> <span class="n">fastq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">align</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">aligner</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">MD</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cs</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+            <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">align</span><span class="o">.</span><span class="n">strand</span> <span class="o">==</span> <span class="o">+</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="n">flag</span> <span class="o">=</span> <span class="s1">&#39;0&#39;</span>
+                    <span class="n">seq</span> <span class="o">=</span> <span class="n">sequence</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">flag</span> <span class="o">=</span> <span class="s1">&#39;16&#39;</span>
+                    <span class="n">seq</span> <span class="o">=</span> <span class="n">medaka</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">reverse_complement</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
+                <span class="n">rname</span> <span class="o">=</span> <span class="n">align</span><span class="o">.</span><span class="n">ctg</span>
+                <span class="n">pos</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">align</span><span class="o">.</span><span class="n">r_st</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">mapq</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">align</span><span class="o">.</span><span class="n">mapq</span><span class="p">)</span>
+                <span class="n">clip</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">S&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="n">align</span><span class="o">.</span><span class="n">q_st</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span> <span class="o">-</span> <span class="n">align</span><span class="o">.</span><span class="n">q_en</span><span class="p">)]</span>
+                <span class="k">if</span> <span class="n">align</span><span class="o">.</span><span class="n">strand</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="n">clip</span> <span class="o">=</span> <span class="n">clip</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">cigar</span> <span class="o">=</span> <span class="n">clip</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">align</span><span class="o">.</span><span class="n">cigar_str</span> <span class="o">+</span> <span class="n">clip</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">NM</span> <span class="o">=</span> <span class="s1">&#39;NM:i:&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">align</span><span class="o">.</span><span class="n">NM</span><span class="p">)</span>
+
+            <span class="n">latest</span> <span class="o">=</span> <span class="n">read</span><span class="o">.</span><span class="n">get_latest_analysis</span><span class="p">(</span><span class="s1">&#39;Basecall_1D&#39;</span><span class="p">)</span>
+            <span class="n">mod_base</span> <span class="o">=</span> <span class="n">read</span><span class="o">.</span><span class="n">get_analysis_dataset</span><span class="p">(</span><span class="n">latest</span><span class="p">,</span> <span class="n">MODBASEPATH</span><span class="p">)</span>
+            <span class="n">mod_base</span> <span class="o">=</span> <span class="n">mod_base</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">MODTYPE</span><span class="p">)</span>
+            <span class="n">mA</span> <span class="o">=</span> <span class="s1">&#39;MA:B:C,</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">mod_base</span><span class="p">[</span><span class="s1">&#39;6mA&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)))</span>
+            <span class="n">mC</span> <span class="o">=</span> <span class="s1">&#39;MC:B:C,</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">mod_base</span><span class="p">[</span><span class="s1">&#39;5mC&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)))</span>
+
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">((</span>
+                <span class="n">read_id</span><span class="p">,</span> <span class="n">flag</span><span class="p">,</span> <span class="n">rname</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">mapq</span><span class="p">,</span> <span class="n">cigar</span><span class="p">,</span>
+                <span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="s1">&#39;0&#39;</span><span class="p">,</span> <span class="s1">&#39;0&#39;</span><span class="p">,</span> <span class="n">seq</span><span class="p">,</span> <span class="n">qstring</span><span class="p">,</span> <span class="n">NM</span><span class="p">,</span> <span class="n">mA</span><span class="p">,</span> <span class="n">mC</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">results</span></div>
+
+
+<div class="viewcode-block" id="hdf_to_sam"><a class="viewcode-back" href="../../medaka.html#medaka.methdaka.hdf_to_sam">[docs]</a><span class="k">def</span> <span class="nf">hdf_to_sam</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Entry point for converting guppy methylcalled fast5s to sam.&quot;&quot;&quot;</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">((</span><span class="s1">&#39;@HD&#39;</span><span class="p">,</span> <span class="s1">&#39;VN:1.5&#39;</span><span class="p">,</span> <span class="s1">&#39;SO:unsorted&#39;</span><span class="p">)))</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">seq</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">mappy</span><span class="o">.</span><span class="n">fastx_read</span><span class="p">(</span>
+            <span class="n">args</span><span class="o">.</span><span class="n">reference</span><span class="p">,</span> <span class="n">read_comment</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;@SQ</span><span class="se">\t</span><span class="s1">SN:</span><span class="si">{}</span><span class="se">\t</span><span class="s1">LN:</span><span class="si">{}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">seq</span><span class="p">)))</span>
+
+    <span class="n">fast5s</span> <span class="o">=</span> <span class="n">get_fast5_file_list</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">recursive</span><span class="p">)</span>
+    <span class="n">worker</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">hdf_to_sam_worker</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">reference</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">ProcessPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">fast5s</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+                <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">r</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="call_methylation"><a class="viewcode-back" href="../../medaka.html#medaka.methdaka.call_methylation">[docs]</a><span class="k">def</span> <span class="nf">call_methylation</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Entry point for calling methylation from bam file.&quot;&quot;&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">medaka</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">get_named_logger</span><span class="p">(</span><span class="s1">&#39;Mextract&#39;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Processing </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">bam</span><span class="p">))</span>
+    <span class="n">region</span> <span class="o">=</span> <span class="n">medaka</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">get_regions</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">bam</span><span class="p">,</span> <span class="p">[</span><span class="n">args</span><span class="o">.</span><span class="n">region</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">ref</span> <span class="o">=</span> <span class="n">pysam</span><span class="o">.</span><span class="n">FastaFile</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">reference</span><span class="p">)</span>
+    <span class="n">ref</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">fetch</span><span class="p">(</span><span class="n">region</span><span class="o">.</span><span class="n">ref_name</span><span class="p">)</span>
+    <span class="n">motifs</span> <span class="o">=</span> <span class="n">MOTIFS</span><span class="p">[</span><span class="n">args</span><span class="o">.</span><span class="n">meth</span><span class="p">][</span><span class="s1">&#39;motifs&#39;</span><span class="p">]</span>
+    <span class="n">tag_name</span> <span class="o">=</span> <span class="n">MOTIFS</span><span class="p">[</span><span class="n">args</span><span class="o">.</span><span class="n">meth</span><span class="p">][</span><span class="s1">&#39;tag&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_find_loci</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">motif</span><span class="p">,</span> <span class="n">rel_pos</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">):</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">start</span>
+        <span class="k">while</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">motif</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">yield</span> <span class="n">index</span><span class="p">,</span> <span class="n">index</span> <span class="o">+</span> <span class="n">rel_pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">index</span> <span class="o">+</span> <span class="n">rel_pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">output</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">pysam</span><span class="o">.</span><span class="n">AlignmentFile</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">bam</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">bam</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">motif</span><span class="p">,</span> <span class="n">rel_pos</span> <span class="ow">in</span> <span class="n">motifs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Searching for motif &#39;</span><span class="si">{}</span><span class="s2">&#39;.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">motif</span><span class="p">))</span>
+                <span class="n">loci</span> <span class="o">=</span> <span class="n">_find_loci</span><span class="p">(</span>
+                    <span class="n">ref</span><span class="p">,</span> <span class="n">motif</span><span class="p">,</span> <span class="n">rel_pos</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+                <span class="n">locus</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">loci</span><span class="p">)</span>
+
+                <span class="c1"># we assume the reverse strand position is after</span>
+                <span class="c1"># the forward strand</span>
+                <span class="n">is_rev</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">next_pos</span> <span class="o">=</span> <span class="n">locus</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">meth</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+                <span class="n">not_meth</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">pileupcolumn</span> <span class="ow">in</span> <span class="n">bam</span><span class="o">.</span><span class="n">pileup</span><span class="p">(</span>
+                        <span class="n">region</span><span class="o">.</span><span class="n">ref_name</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">end</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">pileupcolumn</span><span class="o">.</span><span class="n">pos</span> <span class="o">&lt;</span> <span class="n">next_pos</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">for</span> <span class="n">read</span> <span class="ow">in</span> <span class="n">pileupcolumn</span><span class="o">.</span><span class="n">pileups</span><span class="p">:</span>
+                        <span class="n">aln</span> <span class="o">=</span> <span class="n">read</span><span class="o">.</span><span class="n">alignment</span>
+                        <span class="k">if</span> <span class="n">read</span><span class="o">.</span><span class="n">is_del</span> \
+                                <span class="ow">or</span> <span class="n">read</span><span class="o">.</span><span class="n">is_refskip</span> \
+                                <span class="ow">or</span> <span class="n">aln</span><span class="o">.</span><span class="n">is_reverse</span> <span class="o">!=</span> <span class="n">is_rev</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="n">qpos</span> <span class="o">=</span> <span class="n">read</span><span class="o">.</span><span class="n">query_position</span>
+                        <span class="n">tag</span> <span class="o">=</span> <span class="n">read</span><span class="o">.</span><span class="n">alignment</span><span class="o">.</span><span class="n">get_tag</span><span class="p">(</span><span class="n">tag_name</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">aln</span><span class="o">.</span><span class="n">is_reverse</span><span class="p">:</span>
+                            <span class="n">mscore</span> <span class="o">=</span> <span class="n">tag</span><span class="p">[</span><span class="n">qpos</span><span class="p">]</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">mscore</span> <span class="o">=</span> <span class="n">tag</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span> <span class="o">-</span> <span class="n">qpos</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+                        <span class="k">if</span> <span class="n">mscore</span> <span class="o">&gt;</span> <span class="n">args</span><span class="o">.</span><span class="n">filter</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+                            <span class="n">meth</span><span class="p">[</span><span class="n">aln</span><span class="o">.</span><span class="n">is_reverse</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                        <span class="k">elif</span> <span class="n">mscore</span> <span class="o">&lt;</span> <span class="n">args</span><span class="o">.</span><span class="n">filter</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                            <span class="n">not_meth</span><span class="p">[</span><span class="n">aln</span><span class="o">.</span><span class="n">is_reverse</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="k">if</span> <span class="n">is_rev</span><span class="p">:</span>
+                        <span class="n">fh</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+                            <span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span>
+                                <span class="n">region</span><span class="o">.</span><span class="n">ref_name</span><span class="p">,</span> <span class="n">locus</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">motif</span><span class="p">,</span>
+                                <span class="n">meth</span><span class="p">[</span><span class="kc">False</span><span class="p">],</span> <span class="n">meth</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+                                <span class="n">not_meth</span><span class="p">[</span><span class="kc">False</span><span class="p">],</span> <span class="n">not_meth</span><span class="p">[</span><span class="kc">True</span><span class="p">])))</span>
+                        <span class="n">fh</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">locus</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">loci</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                            <span class="k">break</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">is_rev</span> <span class="o">=</span> <span class="kc">False</span>
+                            <span class="n">next_pos</span> <span class="o">=</span> <span class="n">locus</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                            <span class="n">meth</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+                            <span class="n">not_meth</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">is_rev</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="n">next_pos</span> <span class="o">=</span> <span class="n">locus</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017-19, Oxford Nanopore Technologies
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
